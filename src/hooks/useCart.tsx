@@ -1,7 +1,7 @@
-import { createContext, ReactNode, useContext, useState } from 'react';
-import { toast } from 'react-toastify';
-import { api } from '../services/api';
-import { Product, Stock } from '../types';
+import { createContext, ReactNode, useContext, useState } from "react";
+import { toast } from "react-toastify";
+import { api } from "../services/api";
+import { Product, Stock } from "../types";
 
 interface CartProviderProps {
   children: ReactNode;
@@ -23,21 +23,72 @@ const CartContext = createContext<CartContextData>({} as CartContextData);
 
 export function CartProvider({ children }: CartProviderProps): JSX.Element {
   const [cart, setCart] = useState<Product[]>(() => {
-    // const storagedCart = Buscar dados do localStorage
+    const storagedCart = localStorage.getItem("@RocketShoes:cart");
 
-    // if (storagedCart) {
-    //   return JSON.parse(storagedCart);
-    // }
+    if (storagedCart) {
+      return JSON.parse(storagedCart);
+    }
 
     return [];
   });
 
   const addProduct = async (productId: number) => {
     try {
-      // TODO
-    } catch {
-      // TODO
+      const productsAlreadyExistInCart = cart.find(
+        (product) => product.id === productId
+      );
+
+      const stock = await api.get<Stock>(`/stock/${productId}`);
+
+      if (!productsAlreadyExistInCart) {
+        if (!validarEstoque(1, stock.data.amount)) return;
+        const product = await api.get<Product>(`/products/${productId}`);
+        localStorage.setItem(
+          "@RocketShoes:cart",
+          JSON.stringify([...cart, { ...product.data, amount: 1 }])
+        );
+        setCart([...cart, { ...product.data, amount: 1 }]);
+        return;
+      }
+
+      if (productsAlreadyExistInCart) {
+        if (
+          !validarEstoque(
+            productsAlreadyExistInCart.amount + 1,
+            stock.data.amount
+          )
+        )
+          return;
+
+        const cartProducts = cart.map((product) => {
+          if (product.id === productId) {
+            return {
+              ...product,
+              amount: product.amount + 1,
+            };
+          }
+
+          return {
+            ...product,
+          };
+        });
+
+        localStorage.setItem("@RocketShoes:cart", JSON.stringify(cartProducts));
+
+        setCart(cartProducts);
+      }
+    } catch (err) {
+      toast.error("Erro na adição do produto");
     }
+  };
+
+  const validarEstoque = (amountAdd: number, amountCart: number): boolean => {
+    if (amountAdd > amountCart) {
+      toast.error("Quantidade solicitada fora de estoque");
+      return false;
+    }
+
+    return true;
   };
 
   const removeProduct = (productId: number) => {
